@@ -1,76 +1,45 @@
 // SPDX-License-Identifier: BUSL-1.1
-
 pragma solidity 0.7.6;
 pragma abicoder v2;
-
-// imports
 import "@openzeppelin/contracts/access/Ownable.sol";
-
 import "./Pool.sol";
 import "./Router.sol";
-
-// libraries
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./interfaces/ILayerZeroReceiver.sol";
 import "./interfaces/ILayerZeroEndpoint.sol";
 import "./interfaces/ILayerZeroUserApplicationConfig.sol";
-
 contract Bridge is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicationConfig {
     using SafeMath for uint256;
-
-    //---------------------------------------------------------------------------
-    // CONSTANTS
     uint8 internal constant TYPE_SWAP_REMOTE = 1;
     uint8 internal constant TYPE_ADD_LIQUIDITY = 2;
     uint8 internal constant TYPE_REDEEM_LOCAL_CALL_BACK = 3;
     uint8 internal constant TYPE_WITHDRAW_REMOTE = 4;
-
-    //---------------------------------------------------------------------------
-    // VARIABLES
     ILayerZeroEndpoint public immutable layerZeroEndpoint;
     mapping(uint16 => bytes) public bridgeLookup;
     mapping(uint16 => mapping(uint8 => uint256)) public gasLookup;
     Router public immutable router;
     bool public useLayerZeroToken;
-
-    //---------------------------------------------------------------------------
-    // EVENTS
     event SendMsg(uint8 msgType, uint64 nonce);
-
-    //---------------------------------------------------------------------------
-    // MODIFIERS
     modifier onlyRouter() {
         require(msg.sender == address(router), "Stargate: caller must be Router.");
         _;
     }
-
     constructor(address _layerZeroEndpoint, address _router) {
         require(_layerZeroEndpoint != address(0x0), "Stargate: _layerZeroEndpoint cannot be 0x0");
         require(_router != address(0x0), "Stargate: _router cannot be 0x0");
         layerZeroEndpoint = ILayerZeroEndpoint(_layerZeroEndpoint);
         router = Router(_router);
     }
-
-    //---------------------------------------------------------------------------
-    // EXTERNAL functions
-
-    function lzReceive(
-        uint16 _srcChainId,
-        bytes memory _srcAddress,
-        uint64 _nonce,
-        bytes memory _payload
-    ) external override {
+    function lzReceive(uint16 _srcChainId, bytes memory _srcAddress, uint64 _nonce, bytes memory _payload) external override {
         require(msg.sender == address(layerZeroEndpoint), "Stargate: only LayerZero endpoint can call lzReceive");
         require(
             _srcAddress.length == bridgeLookup[_srcChainId].length && keccak256(_srcAddress) == keccak256(bridgeLookup[_srcChainId]),
             "Stargate: bridge does not match"
         );
-
         uint8 functionType;
         assembly {
             functionType := mload(add(_payload, 32))
         }
-
         if (functionType == TYPE_SWAP_REMOTE) {
             (
                 ,
@@ -109,79 +78,31 @@ contract Bridge is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicationConfig 
             router.redeemLocalCheckOnRemote(_srcChainId, _srcAddress, _nonce, srcPoolId, dstPoolId, amountSD, to);
         }
     }
-
-    //---------------------------------------------------------------------------
-    // LOCAL CHAIN FUNCTIONS
-    function swap(
-        uint16 _chainId,
-        uint256 _srcPoolId,
-        uint256 _dstPoolId,
-        address payable _refundAddress,
-        Pool.CreditObj memory _c,
-        Pool.SwapObj memory _s,
-        IStargateRouter.lzTxObj memory _lzTxParams,
-        bytes calldata _to,
-        bytes calldata _payload
-    ) external payable onlyRouter {
+    function swap(uint16 _chainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, Pool.CreditObj memory _c, Pool.SwapObj memory _s, IStargateRouter.lzTxObj memory _lzTxParams, bytes calldata _to, bytes calldata _payload) external payable onlyRouter {
         bytes memory payload = abi.encode(TYPE_SWAP_REMOTE, _srcPoolId, _dstPoolId, _lzTxParams.dstGasForCall, _c, _s, _to, _payload);
         _call(_chainId, TYPE_SWAP_REMOTE, _refundAddress, _lzTxParams, payload);
     }
-
-    function redeemLocalCallback(
-        uint16 _chainId,
-        address payable _refundAddress,
-        Pool.CreditObj memory _c,
-        IStargateRouter.lzTxObj memory _lzTxParams,
-        bytes memory _payload
-    ) external payable onlyRouter {
+    function redeemLocalCallback(uint16 _chainId, address payable _refundAddress, Pool.CreditObj memory _c, IStargateRouter.lzTxObj memory _lzTxParams, bytes memory _payload) external payable onlyRouter {
         bytes memory payload;
-
         {
             (, uint256 srcPoolId, uint256 dstPoolId, uint256 amountSD, uint256 mintAmountSD, bytes memory to) = abi.decode(
                 _payload,
                 (uint8, uint256, uint256, uint256, uint256, bytes)
             );
-
-            // swap dst and src because we are headed back
             payload = abi.encode(TYPE_REDEEM_LOCAL_CALL_BACK, dstPoolId, srcPoolId, _c, amountSD, mintAmountSD, to);
         }
-
         _call(_chainId, TYPE_REDEEM_LOCAL_CALL_BACK, _refundAddress, _lzTxParams, payload);
     }
-
-    function redeemLocal(
-        uint16 _chainId,
-        uint256 _srcPoolId,
-        uint256 _dstPoolId,
-        address payable _refundAddress,
-        Pool.CreditObj memory _c,
-        uint256 _amountSD,
-        bytes calldata _to,
-        IStargateRouter.lzTxObj memory _lzTxParams
-    ) external payable onlyRouter {
+    function redeemLocal(uint16 _chainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, Pool.CreditObj memory _c, uint256 _amountSD, bytes calldata _to, IStargateRouter.lzTxObj memory _lzTxParams) external payable onlyRouter {
         bytes memory payload = abi.encode(TYPE_WITHDRAW_REMOTE, _srcPoolId, _dstPoolId, _c, _amountSD, _to);
         _call(_chainId, TYPE_WITHDRAW_REMOTE, _refundAddress, _lzTxParams, payload);
     }
-
-    function sendCredits(
-        uint16 _chainId,
-        uint256 _srcPoolId,
-        uint256 _dstPoolId,
-        address payable _refundAddress,
-        Pool.CreditObj memory _c
-    ) external payable onlyRouter {
+    function sendCredits(uint16 _chainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, Pool.CreditObj memory _c) external payable onlyRouter {
         bytes memory payload = abi.encode(TYPE_ADD_LIQUIDITY, _srcPoolId, _dstPoolId, _c);
         IStargateRouter.lzTxObj memory lzTxObj = IStargateRouter.lzTxObj(0, 0, "0x");
         _call(_chainId, TYPE_ADD_LIQUIDITY, _refundAddress, lzTxObj, payload);
     }
-
-    function quoteLayerZeroFee(
-        uint16 _chainId,
-        uint8 _functionType,
-        bytes calldata _toAddress,
-        bytes calldata _transferAndCallPayload,
-        IStargateRouter.lzTxObj memory _lzTxParams
-    ) external view returns (uint256, uint256) {
+    function quoteLayerZeroFee(uint16 _chainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, IStargateRouter.lzTxObj memory _lzTxParams) external view returns (uint256, uint256) {
         bytes memory payload = "";
         Pool.CreditObj memory c = Pool.CreditObj(1, 1);
         if (_functionType == TYPE_SWAP_REMOTE) {
@@ -200,35 +121,20 @@ contract Bridge is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicationConfig 
         bytes memory lzTxParamBuilt = _txParamBuilder(_chainId, _functionType, _lzTxParams);
         return layerZeroEndpoint.estimateFees(_chainId, address(this), payload, useLayerZeroToken, lzTxParamBuilt);
     }
-
-    //---------------------------------------------------------------------------
-    // dao functions
     function setBridge(uint16 _chainId, bytes calldata _bridgeAddress) external onlyOwner {
         require(bridgeLookup[_chainId].length == 0, "Stargate: Bridge already set!");
         bridgeLookup[_chainId] = _bridgeAddress;
     }
-
-    function setGasAmount(
-        uint16 _chainId,
-        uint8 _functionType,
-        uint256 _gasAmount
-    ) external onlyOwner {
+    function setGasAmount(uint16 _chainId, uint8 _functionType, uint256 _gasAmount) external onlyOwner {
         require(_functionType >= 1 && _functionType <= 4, "Stargate: invalid _functionType");
         gasLookup[_chainId][_functionType] = _gasAmount;
     }
-
-    function approveTokenSpender(
-        address token,
-        address spender,
-        uint256 amount
-    ) external onlyOwner {
+    function approveTokenSpender(address token, address spender, uint256 amount) external onlyOwner {
         IERC20(token).approve(spender, amount);
     }
-
     function setUseLayerZeroToken(bool enable) external onlyOwner {
         useLayerZeroToken = enable;
     }
-
     function forceResumeReceive(uint16 _srcChainId, bytes calldata _srcAddress) external override onlyOwner {
         layerZeroEndpoint.forceResumeReceive(_srcChainId, _srcAddress);
     }
