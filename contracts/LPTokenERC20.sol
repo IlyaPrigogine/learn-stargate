@@ -58,7 +58,7 @@ contract LPTokenERC20 {
         _transfer(msg.sender, to, value);
         return true;
     }
-    function transferFrom(address from, uint256 value) external returns (bool) {
+    function transferFrom(address from, address to, uint256 value) external returns (bool) {
         if (allowance[from][msg.sender] != uint256(-1)) {
             allowance[from][msg.sender] = allowance[from][msg.sender].sub(value);
         }
