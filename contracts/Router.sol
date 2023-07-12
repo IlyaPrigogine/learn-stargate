@@ -283,7 +283,6 @@ contract Router is IStargateRouter, Ownable, ReentrancyGuard {
         Pool pool = _getPool(_poolId);
         pool.withdrawMintFeeBalance(_to);
     }
-
     function withdrawProtocolFee(uint256 _poolId, address _to) external {
         require(protocolFeeOwner == msg.sender, "Stargate: only protocolFeeOwner");
         Pool pool = _getPool(_poolId);
