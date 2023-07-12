@@ -57,7 +57,7 @@ contract LZEndpointMock is ILayerZeroEndpoint {
         ILayerZeroReceiver(_destAddr).lzReceive(_srcChainId, _srcAddress, _nonce, _payload); // invoke lzReceive
     }
     function estimateFees(uint16, address, bytes calldata, bool, bytes calldata) external view override returns (uint256, uint256) {
-        return (mockStaticNativeFee, 0); 
+        return (mockStaticNativeFee, 0);
     }
     function packedBytesToAddr(bytes calldata _b) public pure returns (address) {
         address addr;
