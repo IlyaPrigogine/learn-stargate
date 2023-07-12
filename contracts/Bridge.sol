@@ -138,47 +138,24 @@ contract Bridge is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicationConfig 
     function forceResumeReceive(uint16 _srcChainId, bytes calldata _srcAddress) external override onlyOwner {
         layerZeroEndpoint.forceResumeReceive(_srcChainId, _srcAddress);
     }
-
-    //---------------------------------------------------------------------------
-    // generic config for user Application
-    function setConfig(
-        uint16 _version,
-        uint16 _chainId,
-        uint256 _configType,
-        bytes calldata _config
-    ) external override onlyOwner {
+    function setConfig(uint16 _version, uint16 _chainId, uint256 _configType, bytes calldata _config) external override onlyOwner {
         layerZeroEndpoint.setConfig(_version, _chainId, _configType, _config);
     }
-
     function setSendVersion(uint16 version) external override onlyOwner {
         layerZeroEndpoint.setSendVersion(version);
     }
-
     function setReceiveVersion(uint16 version) external override onlyOwner {
         layerZeroEndpoint.setReceiveVersion(version);
     }
-
-    //---------------------------------------------------------------------------
-    // INTERNAL functions
     function txParamBuilderType1(uint256 _gasAmount) internal pure returns (bytes memory) {
         uint16 txType = 1;
         return abi.encodePacked(txType, _gasAmount);
     }
-
-    function txParamBuilderType2(
-        uint256 _gasAmount,
-        uint256 _dstNativeAmount,
-        bytes memory _dstNativeAddr
-    ) internal pure returns (bytes memory) {
+    function txParamBuilderType2(uint256 _gasAmount, uint256 _dstNativeAmount, bytes memory _dstNativeAddr) internal pure returns (bytes memory) {
         uint16 txType = 2;
         return abi.encodePacked(txType, _gasAmount, _dstNativeAmount, _dstNativeAddr);
     }
-
-    function _txParamBuilder(
-        uint16 _chainId,
-        uint8 _type,
-        IStargateRouter.lzTxObj memory _lzTxParams
-    ) internal view returns (bytes memory) {
+    function _txParamBuilder(uint16 _chainId, uint8 _type, IStargateRouter.lzTxObj memory _lzTxParams) internal view returns (bytes memory) {
         bytes memory lzTxParam;
         address dstNativeAddr;
         {
@@ -187,29 +164,19 @@ contract Bridge is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicationConfig 
                 dstNativeAddr := mload(add(dstNativeAddrBytes, 20))
             }
         }
-
         uint256 totalGas = gasLookup[_chainId][_type].add(_lzTxParams.dstGasForCall);
         if (_lzTxParams.dstNativeAmount > 0 && dstNativeAddr != address(0x0)) {
             lzTxParam = txParamBuilderType2(totalGas, _lzTxParams.dstNativeAmount, _lzTxParams.dstNativeAddr);
         } else {
             lzTxParam = txParamBuilderType1(totalGas);
         }
-
         return lzTxParam;
     }
-
-    function _call(
-        uint16 _chainId,
-        uint8 _type,
-        address payable _refundAddress,
-        IStargateRouter.lzTxObj memory _lzTxParams,
-        bytes memory _payload
-    ) internal {
+    function _call(uint16 _chainId, uint8 _type, address payable _refundAddress, IStargateRouter.lzTxObj memory _lzTxParams, bytes memory _payload) internal {
         bytes memory lzTxParamBuilt = _txParamBuilder(_chainId, _type, _lzTxParams);
         uint64 nextNonce = layerZeroEndpoint.getOutboundNonce(_chainId, address(this)) + 1;
         layerZeroEndpoint.send{value: msg.value}(_chainId, bridgeLookup[_chainId], _payload, _refundAddress, address(this), lzTxParamBuilt);
         emit SendMsg(_type, nextNonce);
     }
-
     function renounceOwnership() public override onlyOwner {}
 }
