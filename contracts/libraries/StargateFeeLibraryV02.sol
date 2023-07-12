@@ -73,28 +73,14 @@ contract StargateFeeLibraryV02 is IStargateFeeLibrary, Ownable, ReentrancyGuard 
         }
         return (eqFee, protocolSubsidy);
     }
-    function _getTrapezoidArea(
-        uint256 lambda,
-        uint256 yOffset,
-        uint256 xUpperBound,
-        uint256 xLowerBound,
-        uint256 xStart,
-        uint256 xEnd
-    ) internal pure returns (uint256) {
+    function _getTrapezoidArea(uint256 lambda, uint256 yOffset, uint256 xUpperBound, uint256 xLowerBound, uint256 xStart, uint256 xEnd) internal pure returns (uint256) {
         require(xEnd >= xLowerBound && xStart <= xUpperBound, "Stargate: balance out of bound");
         uint256 xBoundWidth = xUpperBound.sub(xLowerBound);
-
-        // xStartDrift = xUpperBound.sub(xStart);
         uint256 yStart = xUpperBound.sub(xStart).mul(lambda).div(xBoundWidth).add(yOffset);
-
-        // xEndDrift = xUpperBound.sub(xEnd)
         uint256 yEnd = xUpperBound.sub(xEnd).mul(lambda).div(xBoundWidth).add(yOffset);
-
-        // compute the area
         uint256 deltaX = xStart.sub(xEnd);
         return yStart.add(yEnd).mul(deltaX).div(2).div(DENOMINATOR);
     }
-
     function getVersion() external pure override returns (string memory) {
         return "2.0.0";
     }
