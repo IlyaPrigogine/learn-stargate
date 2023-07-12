@@ -26,6 +26,8 @@
     "testLPTokenERC20": "npx hardhat test ./test/LPTokenERC20.test.js",
     "testSwapMath": "npx hardhat test ./test/SwapMath.test.js",
     "simualtion": "npx hardhat test ./test/executeAction.test.js",
+
+
     "testDeploy": "npx hardhat --network fuji-sandbox deploy",
     "wireBridges": "npx hardhat --network arbitrum-rinkeby-sandbox wireBridges --target-networks optimism-kovan-sandbox",
     "wireStargateTokens": "npx hardhat --network arbitrum-rinkeby-sandbox wireStargateTokens --target-networks optimism-kovan-sandbox",
